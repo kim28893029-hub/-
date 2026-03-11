@@ -2,86 +2,99 @@ import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+import time
 
 
-def search_store(query):
+def search_naver(query):
 
-    url = f"https://map.naver.com/v5/search/{query}"
+    url = f"https://search.naver.com/search.naver?query={query}"
 
     headers = {
-        "User-Agent":"Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0"
     }
 
-    r = requests.get(url,headers=headers)
+    try:
+        r = requests.get(url, headers=headers)
+        soup = BeautifulSoup(r.text, "lxml")
 
-    if r.status_code != 200:
+        text = soup.get_text()
+
+        return text
+
+    except:
         return None
 
-    soup = BeautifulSoup(r.text,"html.parser")
 
-    text = soup.get_text()
+def validate(df):
 
-    return text
-
-
-def validate_excel(file):
-
-    df = pd.read_excel(file)
-
-    results=[]
-    real_addresses=[]
+    results = []
+    real_addr = []
 
     for i,row in df.iterrows():
 
-        name=str(row[0])
-        input_addr=str(row[1])
+        name = str(row[0])
+        addr = str(row[1])
 
-        search=name.replace("롯데리아","롯데리아 ")
+        search = name.replace("롯데리아","롯데리아 ")
 
-        page=search_store(search)
+        page = search_naver(search)
 
         if page is None:
 
             results.append("X")
-            real_addresses.append("검색실패")
+            real_addr.append("검색실패")
             continue
 
-        if input_addr.split()[0] in page:
+        key = addr.split()[0]
+
+        if key in page:
 
             results.append("O")
-            real_addresses.append("확인됨")
+            real_addr.append("검색확인")
 
         else:
 
             results.append("X")
-            real_addresses.append("주소불일치")
+            real_addr.append("주소불일치")
 
-    df["진위"]=results
-    df["실제주소"]=real_addresses
+        time.sleep(0.5)
+
+    df["진위여부"] = results
+    df["확인결과"] = real_addr
 
     return df
 
 
-st.title("지점 주소 검증기")
+st.title("가맹점 주소 검증기")
 
-file=st.file_uploader("엑셀 업로드",type=["xlsx"])
+st.write("엑셀 업로드 → 지점명 기반 주소 검증")
+
+file = st.file_uploader("엑셀 업로드", type=["xlsx"])
 
 if file:
 
-    st.write("검증 진행중")
+    df = pd.read_excel(file)
 
-    result_df=validate_excel(file)
+    st.write("데이터 확인")
 
-    st.success("완료")
+    st.dataframe(df.head())
 
-    st.dataframe(result_df)
+    if st.button("검증 시작"):
 
-    result_df.to_excel("result.xlsx",index=False)
+        with st.spinner("검증 진행중..."):
 
-    with open("result.xlsx","rb") as f:
+            result = validate(df)
 
-        st.download_button(
-            "결과 엑셀 다운로드",
-            f,
-            file_name="result.xlsx"
-        )
+        st.success("검증 완료")
+
+        st.dataframe(result)
+
+        result.to_excel("result.xlsx", index=False)
+
+        with open("result.xlsx","rb") as f:
+
+            st.download_button(
+                "결과 엑셀 다운로드",
+                f,
+                file_name="result.xlsx"
+            )
